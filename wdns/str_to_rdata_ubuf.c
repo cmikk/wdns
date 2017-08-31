@@ -594,9 +594,9 @@ _wdns_str_to_rdata_ubuf(ubuf *u, const char *str,
 
 		case rdf_repstring: {
 			const char * end;
-			size_t u_oclen_offset;
-			size_t str_len;
-			uint8_t oclen = 0;
+			unsigned char *s;
+			size_t slen;
+			ubuf *sb;
 
 			while (*str) {
 				if (isspace(*str)) {
@@ -605,25 +605,29 @@ _wdns_str_to_rdata_ubuf(ubuf *u, const char *str,
 				}
 
 				end = str;
-				oclen = 0;
 
-				u_oclen_offset = ubuf_size(u);
-				ubuf_append(u, &oclen, sizeof(oclen));
-
-				end += rdata_from_str_string((const uint8_t*)str, u);
+				sb = ubuf_new();
+				end += rdata_from_str_string((const uint8_t*)str, sb);
 				if (end == str) {
 					res = wdns_res_parse_error;
+					ubuf_destroy(&sb);
 					goto err;
 				}
-				str_len = ubuf_size(u) - u_oclen_offset - 1;
 
-				oclen = (uint8_t)str_len;
-				if (oclen != str_len) {
-					res = wdns_res_parse_error;
-					goto err;
+				slen = ubuf_size(sb);
+				s = ubuf_data(sb);
+				while (slen > 0) {
+					uint8_t oclen = (uint8_t)slen;
+					if (slen > 255) {
+						oclen = 255;
+					}
+					ubuf_append(u, &oclen, sizeof(oclen));
+					ubuf_append(u, s, (size_t)oclen);
+					s += oclen;
+					slen -= oclen;
 				}
-				ubuf_data(u)[u_oclen_offset] = oclen;
 
+				ubuf_destroy(&sb);
 				str = end;
 			}
 
